@@ -1,35 +1,30 @@
 import eventlet
-import numpy as np
-
 eventlet.monkey_patch()  # patch standard library for concurrency
 
 import json
-from datetime import datetime
 from flask import Flask, render_template, request
 from flask_socketio import SocketIO, emit
 from threading import Thread
 from time import sleep
+
 from config_manager import ConfigManager
-from fake_hub import FakeHub
-# from network_module import IOContext, TCPConnection, Command
-from network_module import Command
-from datamon import DaqCompMonitor, TpcReadoutMonitor, CommCodes
+from datamon import CommCodes
+from connection_interface import ConnectionInterface
 
 
 app = Flask(__name__)
 socketio = SocketIO(app, cors_allowed_origins="*", async_mode="eventlet")
-
+"""
+Handle the TPC configuration
+"""
 config_mgr = ConfigManager()
-daq_metrics = DaqCompMonitor()
-tpc_readout_metrics = TpcReadoutMonitor()
 
 """
-  Make the TCP connections. 
+  Make the TCP or MQTT connections. 
 """
-fake_hub = FakeHub()
-fake_hub.start_connection()
-devices = fake_hub.get_devices()
-device_title = fake_hub.get_device_names()
+conn_interface = ConnectionInterface(interface="TCP")
+conn_interface.open_connections()
+devices = conn_interface.get_device_names()
 
 
 # Map GUI buttons to communication codes
@@ -47,74 +42,30 @@ command_map = {
     "STOP_RUN": int(CommCodes.ColStopRun)
 }
 
-def prepare_metric_dict(metric_dict):
-    for k, v in metric_dict.items():
-        if type(v) is np.ndarray:
-            metric_dict[k] = v.tolist()
-    return metric_dict
-
-def stream_device(device_name):
+def stream_device():
     """Continuously read from a TCP connection and emit received commands."""
-    tcp_conn = devices[device_name]
     while True:
-        cmd_list = tcp_conn.read_recv_buffer(1000)
-        if cmd_list:
-            for cmd in cmd_list:
-                if device_name == "DaemonStat":
-                    daq_metrics.deserialize(cmd.arguments)
-                    payload = prepare_metric_dict(daq_metrics.get_metric_dict())
-                elif device_name == "TPCReadoutStat":
-                    tpc_readout_metrics.deserialize(cmd.arguments)
-                    payload = prepare_metric_dict(tpc_readout_metrics.get_metric_dict())
-                else:
-                    payload = cmd.arguments
-
-                socketio.emit("command_response",
-                    {"device": device_name, "timestamp": datetime.now().strftime("%H:%M:%S"),
-                            "command": cmd.command, "args": payload}
-                )
+        data = conn_interface.get_telemetry_data()
+        if data is None:
+            sleep(0.1)
+            continue
+        socketio.emit("command_response",
+            {"device": data["name"], "timestamp": data["timestamp_sec"], "command": data["cmd"], "args": data["args"]}
+        )
         eventlet.sleep(0.5)  # non-blocking sleep for eventlet
 
-for device_name in devices:
-    t = Thread(target=stream_device, args=(device_name,), daemon=True)
-    t.start()
+t = Thread(target=stream_device, daemon=True)
+t.start()
 
-def handle_command(device_name, command_name, sid, value=None):
-    tcp_conn = devices[device_name]
-
+def handle_command(device_name, command_name, value=None):
+    args = []
     if value is not None:
-        if type(value) is dict:
-            args = [1]
-            args += config_mgr.serialize()
-            cmd = Command(command_map[command_name], len(args))
-            cmd.arguments = args
-            tcp_conn.write_send_buffer(cmd)
-        else:
-            cmd = Command(command_map[command_name], 1)
-            cmd.arguments = [int(value)]
-            tcp_conn.write_send_buffer(cmd)
-    else:
-        cmd = Command(command_map[command_name], 0)
-        tcp_conn.write_send_buffer(cmd)
+        args = [1] + config_mgr.serialize() if type(value) is dict else [int(value)]
+    conn_interface.send_command(dev_name=device_name, command=command_map[command_name], args=args)
 
-    while True:
-        cmd_list = tcp_conn.read_recv_buffer(1000)
-        if not cmd_list:
-            break
-        for cmd in cmd_list:
-            recv_cmd = cmd.command
-            recv_args = cmd.arguments
-            # Emit to client: include device name
-            socketio.emit(
-                'command_response',
-                {'device': device_name, "timestamp": datetime.now().strftime("%H:%M:%S"),
-                        'command': recv_cmd, 'args': recv_args}, room=sid)
-        sleep(0.5)
 @app.route('/')
 def index():
-    return render_template('index_twocol_wconfig.html', devices=device_title)
-    # return render_template('index_twocol.html', devices=device_title)
-    # return render_template('index.html', devices=device_title)
+    return render_template('index_twocol_wconfig.html', devices=conn_interface.get_device_titles())
 
 @socketio.on('load_config_file')
 def on_load_config_file(data):
@@ -143,18 +94,13 @@ def on_send_command(data):
     value = data.get('value')
     sid = request.sid
     if device_name in devices and cmd_name:
-        thread = Thread(target=handle_command, args=(device_name, cmd_name, sid, value))
-        thread.start()
+        handle_command(device_name=device_name, command_name=cmd_name, value=value)
     else:
         emit('command_response', {'device': device_name, 'command': 'ERROR', 'args': 'Invalid device or command'}, room=sid)
 
 if __name__ == '__main__':
     # socketio.run(app, debug=True)
-    socketio.run(app, host='0.0.0.0', port=5000, debug=True, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5001, debug=True, use_reloader=False)
 
     # Stop the connections
-    fake_hub.shutdown_connections()
-    # for device_name in devices:
-    #     print("Stopping connection " + device_name + "..")
-    #     devices[device_name].stop_ctx(io_context)
-    # print("Closed all server TCP/IP connections...")
+    conn_interface.close_connections()
