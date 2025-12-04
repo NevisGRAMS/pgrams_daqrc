@@ -1,5 +1,6 @@
 from fake_hub import FakeHub
 from mqtt_link import MqttLink
+from grafana_link import GrafanaLink
 from datamon import DaqCompMonitor, TpcReadoutMonitor, CommCodes
 
 from threading import Thread
@@ -19,17 +20,14 @@ class ConnectionInterface:
         self.deserial_queue = Queue()
         self.send_queue = Queue()
 
-        # self.device_dict = {
-        #     "DaemonStat": 50000,
-        #     "DaemonCmd": 50001,
-        #     "TPCReadoutStat": 50002,
-        #     "TPCReadoutCmd": 50003,
-        # }
+        # Start the Grafana link
+        self.grafana_link = GrafanaLink()
+
         self.device_dict = {
-            "DaemonStat": 50010,
-            "DaemonCmd": 50011,
-            "TPCReadoutStat": 50012,
-            "TPCReadoutCmd": 50013,
+            "DaemonStat": 50000,
+            "DaemonCmd": 50001,
+            "TPCReadoutStat": 50002,
+            "TPCReadoutCmd": 50003,
         }
 
         print(f"Connecting to {interface}..")
@@ -98,6 +96,9 @@ class ConnectionInterface:
             if not self.serialized_data_queue.empty():
                 telem = self.serialized_data_queue.get()
                 deserialized_data = self.deserialize_telemetry(device=telem["dev"], data=telem["cmd_packet"].arguments)
+                # Send data to Grafana
+                self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
+                # Update webpage with raw metrics
                 self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
                                                "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
             sleep(0.1)
