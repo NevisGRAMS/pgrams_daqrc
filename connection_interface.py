@@ -1,7 +1,8 @@
 from fake_hub import FakeHub
 from mqtt_link import MqttLink
 from grafana_link import GrafanaLink
-from datamon import DaqCompMonitor, TpcReadoutMonitor, CommCodes
+from datamon import DaqCompMonitor, TpcReadoutMonitor, LowBwTpcMonitor, CommCodes
+from test_web import ChannelMonitorWeb
 
 from threading import Thread
 from queue import Queue
@@ -24,10 +25,12 @@ class ConnectionInterface:
         self.grafana_link = GrafanaLink()
 
         self.device_dict = {
-            "DaemonStat": 50000,
-            "DaemonCmd": 50001,
-            "TPCReadoutStat": 50002,
-            "TPCReadoutCmd": 50003,
+            "DaemonStat": 50010,
+            "DaemonCmd": 50011,
+            "TPCReadoutStat": 50012,
+            "TPCReadoutCmd": 50013,
+            "TPCMonitorStat": 50014,
+            "TPCMonitorCmd": 50015,
         }
 
         print(f"Connecting to {interface}..")
@@ -41,12 +44,18 @@ class ConnectionInterface:
 
         self.deserializers = {
             "DaemonStat": DaqCompMonitor(),
-            "TPCReadoutStat": TpcReadoutMonitor()
+            "TPCReadoutStat": TpcReadoutMonitor(),
+            "TPCMonitorStat": LowBwTpcMonitor()
         }
         self.device_title = [
                 {'name': device_name, 'title': device_name + " [" + str(self.device_dict[device_name]) + "]"}
                  for device_name in self.device_dict
         ]
+
+        # Start gui
+        #self.monitor = ChannelMonitorGUI()
+        self.monitor = ChannelMonitorWeb()
+        self.monitor.run()
 
         # Start the streaming
         t = Thread(target=self.deserialize_telemetry_args, daemon=True)
@@ -90,6 +99,11 @@ class ConnectionInterface:
             return self.convert_metric_dict(self.deserializers[device].get_metric_dict())
         return data
 
+    def display_data(self, data):
+        print("Updating TPC metrics..")
+        self.monitor.update_data(data["charge_baseline"], data["charge_rms"], data["charge_avg_num_hits"], 
+                                 data["light_baseline"], data["light_rms"], data["light_avg_num_hits"])
+
     def deserialize_telemetry_args(self):
         print("Starting telemetry stream deserialization..")
         while True:
@@ -98,6 +112,8 @@ class ConnectionInterface:
                 deserialized_data = self.deserialize_telemetry(device=telem["dev"], data=telem["cmd_packet"].arguments)
                 # Send data to Grafana
                 self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
+                if telem["dev"] == "TPCMonitorStat":
+                    self.display_data(deserialized_data)
                 # Update webpage with raw metrics
                 self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
                                                "cmd": telem["cmd_packet"].command, 'args': deserialized_data})

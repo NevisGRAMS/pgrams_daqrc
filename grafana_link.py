@@ -7,7 +7,8 @@ class GrafanaLink:
         self.broker_address = "localhost" # Replace with your broker address
         self.port = 1883
         self.topic = {"DaemonStat": "metrics/daemon",
-                      "TPCReadoutStat": "metrics/tpc_readout"}
+                      "TPCReadoutStat": "metrics/tpc_readout",
+                      "TPCMonitorStat": "metrics/tpc_monitor"}
 
         self.client = None
         # Start the client connection

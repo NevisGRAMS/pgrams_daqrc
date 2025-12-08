@@ -26,7 +26,6 @@ conn_interface = ConnectionInterface(interface="TCP")
 conn_interface.open_connections()
 devices = conn_interface.get_device_names()
 
-
 # Map GUI buttons to communication codes
 command_map = {
     "START_STATUS": int(CommCodes.OrcStartComputerStatus),
@@ -36,10 +35,13 @@ command_map = {
     "REBOOT_COMPUTER": int(CommCodes.OrcExecCpuRestart),
     "SHUTDOWN_COMPUTER": int(CommCodes.OrcExecCpuShutdown),
     "PCIE_DRIVER_INIT": int(CommCodes.OrcPcieInit),
+    "START_MONITOR": int(CommCodes.OrcBootMonitor),
+    "STOP_MONITOR": int(CommCodes.OrcShutdownMonitor),
     "RESET": int(CommCodes.ColResetRun),
     "CONFIGURE": int(CommCodes.ColConfigure),
     "START_RUN": int(CommCodes.ColStartRun),
-    "STOP_RUN": int(CommCodes.ColStopRun)
+    "STOP_RUN": int(CommCodes.ColStopRun),
+    "MIN_METRIC": int(CommCodes.ColQueryLBData)
 }
 
 def stream_device():
@@ -60,7 +62,10 @@ t.start()
 def handle_command(device_name, command_name, value=None):
     args = []
     if value is not None:
-        args = [1] + config_mgr.serialize() if type(value) is dict else [int(value)]
+        if device_name == "TPCMonitorCmd":
+            args = [int(v) for v in value]
+        else:
+            args = [1] + config_mgr.serialize() if type(value) is dict else [int(value)]
     conn_interface.send_command(dev_name=device_name, command=command_map[command_name], args=args)
 
 @app.route('/')
@@ -100,7 +105,7 @@ def on_send_command(data):
 
 if __name__ == '__main__':
     # socketio.run(app, debug=True)
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5002, debug=True, use_reloader=False)
 
     # Stop the connections
     conn_interface.close_connections()

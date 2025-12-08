@@ -125,7 +125,7 @@ devices.forEach(({ name, title }) => {
   div.appendChild(btnContainer);
 
   if (name === "DaemonCmd") {
-    ["Start All DAQ", "Shutdown All DAQ", "Start Status", "Stop Status"].forEach(label => {
+    ["Start All DAQ", "Shutdown All DAQ", "Start Status", "Stop Status", "Start Monitor", "Stop Monitor"].forEach(label => {
       const btn = document.createElement("button");
       btn.textContent = label;
       btn.onclick = () => sendCommand(name, label.replace(/ /g, '_').toUpperCase());
@@ -152,6 +152,42 @@ devices.forEach(({ name, title }) => {
       }
       bottomRow.appendChild(btn);
     });
+
+  } else if (name.endsWith("TPCMonitorCmd")) {
+
+    const configContainer = document.createElement("div");
+    configContainer.className = "config-container";
+                                                           
+    // --- First row (Send + Run/Stop/Reset) ---
+    const topRow = document.createElement("div");
+    topRow.style.display = "flex";
+    topRow.style.alignItems = "center";
+    topRow.style.gap = "10px";
+
+    ["run-num", "file-num", "num-event", "stride-num"].forEach(label => {
+      const input = document.createElement("input");
+      input.type = "number";
+      input.placeholder = label;
+      input.id = label;
+      topRow.appendChild(input);
+    });
+
+    const configBtn = document.createElement("button");
+    configBtn.textContent = "MinMetrics";
+    configBtn.onclick = () => {
+      const run_num = document.getElementById(`run-num`).value;
+      const file_num = document.getElementById(`file-num`).value;
+      const num_evt = document.getElementById(`num-event`).value;
+      const stride_num = document.getElementById(`stride-num`).value;
+      const value = [run_num, file_num, num_evt, stride_num];
+      sendCommand(name, "Min Metric".replace(' ', '_').toUpperCase(), value);
+    };
+    topRow.appendChild(configBtn);
+
+    configContainer.appendChild(topRow);
+                                                     
+    // --- Add the container to the device panel ---
+    btnContainer.appendChild(configContainer);
 
   } else if (name.endsWith("Cmd")) {
 
