@@ -9,12 +9,16 @@ from queue import Queue
 import numpy as np
 from time import time, sleep
 
+
 class ConnectionInterface:
     def __init__(self, interface):
 
-        self.ip_addr = "10.44.45.96"
+        self.ip_addr = ""
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
+
+        self.mqtt_broker_address = "localhost"
+        self.mqtt_broker_port = 1883
 
         self.serialized_data_queue = Queue()
         # Queues to hold the received messages streams
@@ -22,25 +26,27 @@ class ConnectionInterface:
         self.send_queue = Queue()
 
         # Start the Grafana link
-        self.grafana_link = GrafanaLink()
+        self.grafana_link = GrafanaLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port)
 
         self.device_dict = {
-            "DaemonStat": 50010,
-            "DaemonCmd": 50011,
-            "TPCReadoutStat": 50012,
-            "TPCReadoutCmd": 50013,
-            "TPCMonitorStat": 50014,
-            "TPCMonitorCmd": 50015,
+            "DaemonStat": 50020,
+            "DaemonCmd": 50021,
+            "TPCReadoutStat": 50022,
+            "TPCReadoutCmd": 50023,
+            "TPCMonitorStat": 50024,
+            "TPCMonitorCmd": 50025,
         }
 
         print(f"Connecting to {interface}..")
-        self.interface = interface
-        if interface == "TCP":
-            self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
-                                     queue=self.serialized_data_queue, send_queue=self.send_queue)
-        elif interface == "MQTT":
-            self.interface = MqttLink(mqtt_host=self.ip_addr, mqtt_port=5300,
-                                      queue=self.serialized_data_queue, send_queue=self.send_queue)
+        metric_topic = "rc/pgrams_metric_stream"
+        command_topic = "rc/pgrams_command_stream"
+        self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
+                                 mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
+                                 metric_topic=metric_topic, command_topic=command_topic)
+
+        MqttLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
+                 metric_topic=metric_topic, command_topic=command_topic,
+                 queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
             "DaemonStat": DaqCompMonitor(),
@@ -53,13 +59,13 @@ class ConnectionInterface:
         ]
 
         # Start gui
-        #self.monitor = ChannelMonitorGUI()
         self.monitor = ChannelMonitorWeb()
         self.monitor.run()
 
         # Start the streaming
         t = Thread(target=self.deserialize_telemetry_args, daemon=True)
         t.start()
+        print("Reached end of connection class")
 
     def send_command(self, dev_name, command, args):
         self.send_queue.put({"dev": dev_name, "cmd": command, "args": args})
