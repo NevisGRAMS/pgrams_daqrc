@@ -41,7 +41,8 @@ command_map = {
     "CONFIGURE": int(CommCodes.ColConfigure),
     "START_RUN": int(CommCodes.ColStartRun),
     "STOP_RUN": int(CommCodes.ColStopRun),
-    "MIN_METRIC": int(CommCodes.ColQueryLBData)
+    "MIN_METRIC": int(CommCodes.ColQueryLBData),
+    "EVENT_METRIC": int(CommCodes.ColQueryEventData)
 }
 
 def stream_device():
@@ -60,6 +61,7 @@ t = Thread(target=stream_device, daemon=True)
 t.start()
 
 def handle_command(device_name, command_name, value=None):
+    print("-> ", device_name, command_name, value)
     args = []
     if value is not None:
         if device_name == "TPCMonitorCmd":
@@ -105,7 +107,7 @@ def on_send_command(data):
 
 if __name__ == '__main__':
     # socketio.run(app, debug=True)
-    socketio.run(app, host='0.0.0.0', port=5001, debug=True, use_reloader=False)
+    socketio.run(app, host='0.0.0.0', port=5002, debug=True, use_reloader=False)
 
     # Stop the connections
     conn_interface.close_connections()

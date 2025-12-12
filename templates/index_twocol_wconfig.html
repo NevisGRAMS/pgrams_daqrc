@@ -164,7 +164,7 @@ devices.forEach(({ name, title }) => {
     topRow.style.alignItems = "center";
     topRow.style.gap = "10px";
 
-    ["run-num", "file-num", "num-event", "stride-num"].forEach(label => {
+    ["run-num", "file-num", "num-event", "stride-num", "random-single"].forEach(label => {
       const input = document.createElement("input");
       input.type = "number";
       input.placeholder = label;
@@ -172,17 +172,31 @@ devices.forEach(({ name, title }) => {
       topRow.appendChild(input);
     });
 
-    const configBtn = document.createElement("button");
-    configBtn.textContent = "MinMetrics";
-    configBtn.onclick = () => {
+    const minMetricBtn = document.createElement("button");
+    minMetricBtn.textContent = "MinMetrics";
+    minMetricBtn.onclick = () => {
       const run_num = document.getElementById(`run-num`).value;
       const file_num = document.getElementById(`file-num`).value;
       const num_evt = document.getElementById(`num-event`).value;
       const stride_num = document.getElementById(`stride-num`).value;
-      const value = [run_num, file_num, num_evt, stride_num];
+      const random_single = document.getElementById(`random-single`).value;
+      const value = [run_num, file_num, num_evt, stride_num, random_single];
       sendCommand(name, "Min Metric".replace(' ', '_').toUpperCase(), value);
     };
-    topRow.appendChild(configBtn);
+    topRow.appendChild(minMetricBtn);
+
+    const eventMetricBtn = document.createElement("button");
+    eventMetricBtn.textContent = "EventMetric";
+    eventMetricBtn.onclick = () => {
+      const run_num = document.getElementById(`run-num`).value;
+      const file_num = document.getElementById(`file-num`).value;
+      const num_evt = document.getElementById(`num-event`).value;
+      const stride_num = document.getElementById(`stride-num`).value;
+      const random_single = document.getElementById(`random-single`).value;
+      const value = [run_num, file_num, num_evt, stride_num, random_single];
+      sendCommand(name, "Event Metric".replace(' ', '_').toUpperCase(), value);
+    };
+    topRow.appendChild(eventMetricBtn);
 
     configContainer.appendChild(topRow);
                                                      

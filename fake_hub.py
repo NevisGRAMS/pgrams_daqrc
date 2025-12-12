@@ -1,6 +1,6 @@
 from network_module import IOContext, TCPConnection, TCPProtocol, Command
 from threading import Thread
-from time import sleep
+import time
 import paho.mqtt.client as mqtt
 import json
 
@@ -36,12 +36,12 @@ class FakeHub:
     def start_client(self):
         # For metrics PUB
         self.metric_client = mqtt.Client(client_id="MetricPub") # Unique client ID
-        self.metric_client.connect(self.broker_address, self.port)
+        self.metric_client.connect(self.broker_address, self.port, keepalive=120)
         # For commands SUB
         self.command_client = mqtt.Client(client_id="CommandSub")
         self.command_client.on_connect = self.on_connect
         self.command_client.on_message = self.on_message #self.rc_to_daq
-        self.command_client.connect(self.broker_address, self.port)
+        self.command_client.connect(self.broker_address, self.port, keepalive=120)
         self.command_client.loop_start()
         print("Started fake_hub clients")
 
@@ -78,26 +78,41 @@ class FakeHub:
 
     def serial_stream_device(self, device_name):
         """Continuously read from a TCP connection and emit received commands."""
+        send_time = time.perf_counter()
         tcp_conn = self.devices[device_name]
         while self.connections_open:
             cmd_list = tcp_conn.read_recv_buffer(1000)
             for cmd in cmd_list:
-                self.daq_to_rc(device_name, cmd)
-            sleep(0.5)
+                self.daq_to_rc(device_name, cmd, heartbeat=False)
+                send_time = time.perf_counter()
+            if abs(time.perf_counter() - send_time) > 60:
+                print("Metric link heartbeat", time.perf_counter() - send_time)
+                send_time = time.perf_counter()
+                self.daq_to_rc(None, None, heartbeat=True)
+            time.sleep(0.1)
 
-    def daq_to_rc(self, device, command):
-        # Receive metric packet from TCP and convert to binary
-        tcp_protocol = TCPProtocol(command.command, len(command.arguments))
-        tcp_protocol.arguments = command.arguments
-        serialized = tcp_protocol.serialize() # returns list of bytes
-        # Construct the json message and send on MQTT
-        message = {"device": device, "cmd": int(command.command), "data": serialized}
-        json_string = json.dumps(message)
-        self.metric_client.publish(self.metric_topic, json_string)
+    def daq_to_rc(self, device, command, heartbeat=False):
+        if heartbeat:
+            message = {"data": 0xFFFF}
+            self.metric_client.publish(self.metric_topic, json.dumps(message))
+        else:
+            # Receive metric packet from TCP and convert to binary
+            tcp_protocol = TCPProtocol(command.command, len(command.arguments))
+            tcp_protocol.arguments = command.arguments
+            serialized = tcp_protocol.serialize() # returns list of bytes
+            # Construct the json message and send on MQTT
+            print("CMD:", hex(int(command.command)))
+            message = {"device": device, "cmd": int(command.command), "data": serialized}
+            self.metric_client.publish(self.metric_topic, json.dumps(message))
 
     def on_message(self, client, userdata, msg):
-        payload = json.loads(msg.payload.decode("utf-8"))
-        deserialized_packet = self.tcp_protocol.deserialize(payload["data"])
-        self.devices[payload["device"]].write_send_buffer(deserialized_packet)
-        sleep(0.5)
+        try:
+            payload = json.loads(msg.payload.decode("utf-8"))
+            if payload["data"] == 0xFFFF:
+                return
+            deserialized_packet = self.tcp_protocol.deserialize(payload["data"])
+            print("FakeHub writing to buffer", deserialized_packet.command)
+            self.devices[payload["device"]].write_send_buffer(deserialized_packet)
+        except Exception as e:
+            print("EXCEPTION", e)
 

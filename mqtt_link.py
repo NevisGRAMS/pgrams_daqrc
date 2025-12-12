@@ -1,6 +1,6 @@
 from threading import Thread
 import paho.mqtt.client as mqtt
-from time import sleep
+import time
 import json
 
 from network_module import TCPProtocol, Command
@@ -38,11 +38,11 @@ class MqttLink:
         self.metric_client = mqtt.Client(client_id="MetricSub")
         self.metric_client.on_connect = self.on_connect
         self.metric_client.on_message = self.on_message
-        self.metric_client.connect(self.broker_address, self.port)
+        self.metric_client.connect(self.broker_address, self.port, keepalive=120)
         self.metric_client.loop_start()
         # For commands PUB
         self.command_client = mqtt.Client(client_id="CommandPub")  # Unique client ID
-        self.command_client.connect(self.broker_address, self.port)
+        self.command_client.connect(self.broker_address, self.port, keepalive=120)
         t2 = Thread(target=self.send_commands, daemon=True)
         t2.start()
 
@@ -63,17 +63,26 @@ class MqttLink:
     def on_message(self, client, userdata, msg):
         """Continuously read from a TCP connection and emit received commands."""
         payload = json.loads(msg.payload.decode("utf-8"))
+        if payload["data"] == 0xFFFF:
+            return
         cmd_packet = self.tcp_protocol.deserialize(payload["data"]) # returns a `Command`
         self.queue.put({"dev": payload["device"], "cmd_packet": cmd_packet})
-        sleep(0.5)
 
     def send_commands(self):
+        send_time = time.perf_counter()
         while True:
             while not self.send_queue.empty():
                 command = self.send_queue.get()
+                print("MQTT sending cmd", command["cmd"])
                 tcp = TCPProtocol(command["cmd"], len(command["args"]))
                 tcp.arguments = command["args"]
                 msg = {"device": command["dev"], "data": tcp.serialize()}
                 self.command_client.publish(self.command_topic, json.dumps(msg))
-                sleep(0.1)
-            sleep(0.2)
+                send_time = time.perf_counter()
+
+            if abs(time.perf_counter() - send_time) > 60:
+                msg = {"data": 0xFFFF}
+                self.command_client.publish(self.command_topic, json.dumps(msg))
+                send_time = time.perf_counter()
+                print("Cmd link heartbeat", msg)
+            time.sleep(0.1)

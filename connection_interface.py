@@ -2,6 +2,7 @@ from fake_hub import FakeHub
 from mqtt_link import MqttLink
 from grafana_link import GrafanaLink
 from datamon import DaqCompMonitor, TpcReadoutMonitor, LowBwTpcMonitor, CommCodes
+from datamon import TpcMonitorChargeEvent, TpcMonitorLightEvent
 from test_web import ChannelMonitorWeb
 
 from threading import Thread
@@ -13,7 +14,7 @@ from time import time, sleep
 class ConnectionInterface:
     def __init__(self, interface):
 
-        self.ip_addr = ""
+        self.ip_addr = "10.44.45.96"
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
 
@@ -29,12 +30,12 @@ class ConnectionInterface:
         self.grafana_link = GrafanaLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port)
 
         self.device_dict = {
-            "DaemonStat": 50020,
-            "DaemonCmd": 50021,
-            "TPCReadoutStat": 50022,
-            "TPCReadoutCmd": 50023,
-            "TPCMonitorStat": 50024,
-            "TPCMonitorCmd": 50025,
+            "DaemonStat": 50010,
+            "DaemonCmd": 50011,
+            "TPCReadoutStat": 50012,
+            "TPCReadoutCmd": 50013,
+            "TPCMonitorStat": 50014,
+            "TPCMonitorCmd": 50015,
         }
 
         print(f"Connecting to {interface}..")
@@ -49,10 +50,13 @@ class ConnectionInterface:
                  queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
-            "DaemonStat": DaqCompMonitor(),
-            "TPCReadoutStat": TpcReadoutMonitor(),
-            "TPCMonitorStat": LowBwTpcMonitor()
+            "DaemonStat": {0x0: DaqCompMonitor()},
+            "TPCReadoutStat": {0x0: TpcReadoutMonitor()},
+            "TPCMonitorStat": {0x4001: LowBwTpcMonitor(),
+                               0x4002: TpcMonitorChargeEvent(),
+                               0x4003: TpcMonitorLightEvent()}
         }
+
         self.device_title = [
                 {'name': device_name, 'title': device_name + " [" + str(self.device_dict[device_name]) + "]"}
                  for device_name in self.device_dict
@@ -68,6 +72,7 @@ class ConnectionInterface:
         print("Reached end of connection class")
 
     def send_command(self, dev_name, command, args):
+        print("Cmd on queue", hex(command))
         self.send_queue.put({"dev": dev_name, "cmd": command, "args": args})
 
     def get_device_names(self):
@@ -99,11 +104,18 @@ class ConnectionInterface:
                 metric_dict[k] = v.tolist()
         return metric_dict
 
-    def deserialize_telemetry(self, device, data):
+    def deserialize_telemetry(self, device, command, data):
         if device in list(self.deserializers.keys()) and len(data) > 0:
-            self.deserializers[device].deserialize(data)
-            return self.convert_metric_dict(self.deserializers[device].get_metric_dict())
+            if len(self.deserializers[device].keys()) == 1:
+                dev_deserializer = self.deserializers[device][0]
+            else:
+                dev_deserializer = self.deserializers[device][command]
+            dev_deserializer.deserialize(data)
+            return self.convert_metric_dict(dev_deserializer.get_metric_dict())
         return data
+
+    def display_samples(self, samples, channel, is_charge):
+        self.monitor.update_samples(sample=samples, channel=channel, is_charge=is_charge)
 
     def display_data(self, data):
         print("Updating TPC metrics..")
@@ -115,11 +127,18 @@ class ConnectionInterface:
         while True:
             if not self.serialized_data_queue.empty():
                 telem = self.serialized_data_queue.get()
-                deserialized_data = self.deserialize_telemetry(device=telem["dev"], data=telem["cmd_packet"].arguments)
+                deserialized_data = self.deserialize_telemetry(device=telem["dev"], command=telem["cmd_packet"].command,
+                                                               data=telem["cmd_packet"].arguments)
                 # Send data to Grafana
                 self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
                 if telem["dev"] == "TPCMonitorStat":
-                    self.display_data(deserialized_data)
+                    if telem["cmd_packet"].command == 0x4001:
+                        self.display_data(deserialized_data)
+                    elif telem["cmd_packet"].command == 0x4002:
+                        self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
+                    elif telem["cmd_packet"].command == 0x4003:
+                        self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
+
                 # Update webpage with raw metrics
                 self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
                                                "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
