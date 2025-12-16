@@ -7,9 +7,9 @@ from flask_socketio import SocketIO, emit
 from threading import Thread
 from time import sleep
 
-from config_manager import ConfigManager
+from connections.config_manager import ConfigManager
 from datamon import CommCodes
-from connection_interface import ConnectionInterface
+from connections.connection_interface import ConnectionInterface
 
 
 app = Flask(__name__)
