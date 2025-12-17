@@ -1,9 +1,12 @@
-from fake_hub import FakeHub
-from mqtt_link import MqttLink
-from grafana_link import GrafanaLink
+import json
+
+from connections.fake_hub import FakeHub
+from connections.mqtt_link import MqttLink
+from slow_controls.grafana_link import GrafanaLink
+from slow_controls.mysql_link import MysqlLink
 from datamon import DaqCompMonitor, TpcReadoutMonitor, LowBwTpcMonitor, CommCodes
 from datamon import TpcMonitorChargeEvent, TpcMonitorLightEvent
-from test_web import ChannelMonitorWeb
+from data_monitoring.test_web import ChannelMonitorWeb
 
 from threading import Thread
 from queue import Queue
@@ -29,13 +32,24 @@ class ConnectionInterface:
         # Start the Grafana link
         self.grafana_link = GrafanaLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port)
 
+        try:
+            self.db_link = MysqlLink()
+            self.device_to_db_table = {
+                "DaemonStat": self.db_link.database_tables["orch_metrics"],
+                "TPCReadoutStat": self.db_link.database_tables["tpc_metrics"],
+            }
+        except Exception as e:
+            print(f"Failed to connect to MySQL database with exception: {e}")
+            self.db_link = None
+            self.device_to_db_table = {}
+
         self.device_dict = {
-            "DaemonStat": 50010,
-            "DaemonCmd": 50011,
-            "TPCReadoutStat": 50012,
-            "TPCReadoutCmd": 50013,
-            "TPCMonitorStat": 50014,
-            "TPCMonitorCmd": 50015,
+            "DaemonStat": 50020,
+            "DaemonCmd": 50021,
+            "TPCReadoutStat": 50022,
+            "TPCReadoutCmd": 50023,
+            "TPCMonitorStat": 50024,
+            "TPCMonitorCmd": 50025,
         }
 
         print(f"Connecting to {interface}..")
@@ -131,6 +145,9 @@ class ConnectionInterface:
                                                                data=telem["cmd_packet"].arguments)
                 # Send data to Grafana
                 self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
+                if self.db_link is not None and telem["dev"] in list(self.device_to_db_table.keys()):
+                    print(telem["dev"])
+                    self.db_link.write_to_database(metrics=deserialized_data, table=self.device_to_db_table[telem["dev"]])
                 if telem["dev"] == "TPCMonitorStat":
                     if telem["cmd_packet"].command == 0x4001:
                         self.display_data(deserialized_data)

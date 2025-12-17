@@ -8,3 +8,4 @@ The conda dependancies are
 ```
 conda install -c conda-forge flask flask-socketio eventlet 
 ```
+If using the MySQL database, first set the password using the environment variable `METRICS_DB_PWD`.
