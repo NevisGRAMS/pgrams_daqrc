@@ -23,7 +23,8 @@ config_mgr = ConfigManager()
   Make the TCP or MQTT connections. 
 """
 conn_interface = ConnectionInterface(interface="TCP")
-conn_interface.open_connections()
+using_fake_hub = conn_interface.get_is_fake_hub()
+if using_fake_hub: conn_interface.open_connections()
 devices = conn_interface.get_device_names()
 
 # Map GUI buttons to communication codes
@@ -110,4 +111,5 @@ if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5002, debug=True, use_reloader=False)
 
     # Stop the connections
-    conn_interface.close_connections()
+    if using_fake_hub:
+        conn_interface.close_connections()

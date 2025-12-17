@@ -1,5 +1,5 @@
 import json
-
+import os
 from connections.fake_hub import FakeHub
 from connections.mqtt_link import MqttLink
 from slow_controls.grafana_link import GrafanaLink
@@ -17,12 +17,13 @@ from time import time, sleep
 class ConnectionInterface:
     def __init__(self, interface):
 
-        self.ip_addr = "10.44.45.96"
+        self.use_fake_hub = False
+        self.ip_addr = os.getenv("FAKE_HUB_IP")
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
 
-        self.mqtt_broker_address = "localhost"
-        self.mqtt_broker_port = 1883
+        self.mqtt_broker_address = os.getenv("MQTT_IP") 
+        self.mqtt_broker_port = int(os.getenv("MQTT_PORT")) 
 
         self.serialized_data_queue = Queue()
         # Queues to hold the received messages streams
@@ -44,23 +45,29 @@ class ConnectionInterface:
             self.device_to_db_table = {}
 
         self.device_dict = {
-            "DaemonStat": 50020,
-            "DaemonCmd": 50021,
-            "TPCReadoutStat": 50022,
-            "TPCReadoutCmd": 50023,
-            "TPCMonitorStat": 50024,
-            "TPCMonitorCmd": 50025,
+            "DaemonStat": 50000,
+            "DaemonCmd": 50001,
+            "TPCReadoutStat": 50002,
+            "TPCReadoutCmd": 50003,
+            "TPCMonitorStat": 50004,
+            "TPCMonitorCmd": 50005,
         }
+
+        self.code_to_device = {
+                0x3000: "DaemonStat",
+                0x4000: "TPCReadoutStat"
+                }
 
         print(f"Connecting to {interface}..")
         metric_topic = "rc/pgrams_metric_stream"
         command_topic = "rc/pgrams_command_stream"
-        self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
-                                 mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
-                                 metric_topic=metric_topic, command_topic=command_topic)
+        if self.use_fake_hub:
+            self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
+                                     mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
+                                     metric_topic=metric_topic, command_topic=command_topic)
 
         MqttLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
-                 metric_topic=metric_topic, command_topic=command_topic,
+                 metric_topic=metric_topic, command_topic=command_topic, use_fake_hub=self.use_fake_hub,
                  queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
@@ -84,6 +91,9 @@ class ConnectionInterface:
         t = Thread(target=self.deserialize_telemetry_args, daemon=True)
         t.start()
         print("Reached end of connection class")
+
+    def get_is_fake_hub(self):
+        return self.use_fake_hub
 
     def send_command(self, dev_name, command, args):
         print("Cmd on queue", hex(command))
@@ -141,22 +151,28 @@ class ConnectionInterface:
         while True:
             if not self.serialized_data_queue.empty():
                 telem = self.serialized_data_queue.get()
-                deserialized_data = self.deserialize_telemetry(device=telem["dev"], command=telem["cmd_packet"].command,
-                                                               data=telem["cmd_packet"].arguments)
-                # Send data to Grafana
-                self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
-                if self.db_link is not None and telem["dev"] in list(self.device_to_db_table.keys()):
-                    print(telem["dev"])
-                    self.db_link.write_to_database(metrics=deserialized_data, table=self.device_to_db_table[telem["dev"]])
-                if telem["dev"] == "TPCMonitorStat":
-                    if telem["cmd_packet"].command == 0x4001:
-                        self.display_data(deserialized_data)
-                    elif telem["cmd_packet"].command == 0x4002:
-                        self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
-                    elif telem["cmd_packet"].command == 0x4003:
-                        self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
-
-                # Update webpage with raw metrics
-                self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
-                                               "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
+                if not self.use_fake_hub:
+                    device = self.code_to_device[telem["code"] & 0x7000]
+                    deserialized_data = self.deserialize_telemetry(device=device, command=telem["code"], data=telem["argv"])
+                    if self.db_link is not None and device in list(self.device_to_db_table.keys()):
+                        self.db_link.write_to_database(metrics=deserialized_data, table=self.device_to_db_table[device])
+                else:
+                    deserialized_data = self.deserialize_telemetry(device=telem["dev"], command=telem["cmd_packet"].command,
+                                                                   data=telem["cmd_packet"].arguments)
+                    # Send data to Grafana
+                    self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
+                    
+                    
+                    
+                    if telem["dev"] == "TPCMonitorStat":
+                        if telem["cmd_packet"].command == 0x4001:
+                            self.display_data(deserialized_data)
+                        elif telem["cmd_packet"].command == 0x4002:
+                            self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
+                        elif telem["cmd_packet"].command == 0x4003:
+                            self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
+                                                                                                                                           
+                    # Update webpage with raw metrics
+                    self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
+                                                   "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
             sleep(0.1)

@@ -3,6 +3,7 @@ from threading import Thread
 import time
 import paho.mqtt.client as mqtt
 import json
+import os
 
 """
   Multiple TCP connections in place of the Hub Computer for now
@@ -36,9 +37,11 @@ class FakeHub:
     def start_client(self):
         # For metrics PUB
         self.metric_client = mqtt.Client(client_id="MetricPub") # Unique client ID
+        self.metric_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
         self.metric_client.connect(self.broker_address, self.port, keepalive=120)
         # For commands SUB
         self.command_client = mqtt.Client(client_id="CommandSub")
+        self.command_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
         self.command_client.on_connect = self.on_connect
         self.command_client.on_message = self.on_message #self.rc_to_daq
         self.command_client.connect(self.broker_address, self.port, keepalive=120)
@@ -46,7 +49,7 @@ class FakeHub:
         print("Started fake_hub clients")
 
     def on_connect(self, client, userdata, flags, rc):
-        print("Connected with result code", rc)
+        print("fake_hub: Connected with result code", rc)
         self.command_client.subscribe(self.command_topic)
 
     def get_devices(self):

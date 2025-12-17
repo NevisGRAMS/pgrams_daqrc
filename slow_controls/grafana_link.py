@@ -1,5 +1,6 @@
 import paho.mqtt.client as mqtt
 import json
+import os
 
 class GrafanaLink:
     def __init__(self, mqtt_broker_addr, mqtt_port):
@@ -23,6 +24,7 @@ class GrafanaLink:
 
     def start_client(self):
         self.client = mqtt.Client(client_id="GrafanaPub") # Unique client ID
+        self.client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
         self.client.connect(self.broker_address, self.port)
         self.client.loop_start() # Start a background thread to handle network traffic
 
