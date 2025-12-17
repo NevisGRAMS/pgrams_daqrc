@@ -17,7 +17,7 @@ from time import time, sleep
 class ConnectionInterface:
     def __init__(self, interface):
 
-        self.use_fake_hub = False
+        self.use_fake_hub = True
         self.ip_addr = os.getenv("FAKE_HUB_IP")
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
@@ -35,9 +35,9 @@ class ConnectionInterface:
 
         try:
             self.db_link = MysqlLink()
-            self.device_to_db_table = {
-                "DaemonStat": self.db_link.database_tables["orch_metrics"],
-                "TPCReadoutStat": self.db_link.database_tables["tpc_metrics"],
+            self.command_to_db_table = {
+                int(CommCodes.OrcHardwareStatus): self.db_link.database_tables["orch_metrics"],
+                int(CommCodes.ColHardwareStatus): self.db_link.database_tables["tpc_metrics"],
             }
         except Exception as e:
             print(f"Failed to connect to MySQL database with exception: {e}")
@@ -45,12 +45,12 @@ class ConnectionInterface:
             self.device_to_db_table = {}
 
         self.device_dict = {
-            "DaemonStat": 50000,
-            "DaemonCmd": 50001,
-            "TPCReadoutStat": 50002,
-            "TPCReadoutCmd": 50003,
-            "TPCMonitorStat": 50004,
-            "TPCMonitorCmd": 50005,
+            "DaemonStat": 50020,
+            "DaemonCmd": 50021,
+            "TPCReadoutStat": 50022,
+            "TPCReadoutCmd": 50023,
+            "TPCMonitorStat": 50024,
+            "TPCMonitorCmd": 50025,
         }
 
         self.code_to_device = {
@@ -71,11 +71,11 @@ class ConnectionInterface:
                  queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
-            "DaemonStat": {0x0: DaqCompMonitor()},
-            "TPCReadoutStat": {0x0: TpcReadoutMonitor()},
-            "TPCMonitorStat": {0x4001: LowBwTpcMonitor(),
-                               0x4002: TpcMonitorChargeEvent(),
-                               0x4003: TpcMonitorLightEvent()}
+            int(CommCodes.OrcHardwareStatus): DaqCompMonitor(),
+            int(CommCodes.ColHardwareStatus): TpcReadoutMonitor(),
+            0x4001: LowBwTpcMonitor(),
+            0x4002: TpcMonitorChargeEvent(),
+            0x4003: TpcMonitorLightEvent()
         }
 
         self.device_title = [
@@ -128,12 +128,19 @@ class ConnectionInterface:
                 metric_dict[k] = v.tolist()
         return metric_dict
 
-    def deserialize_telemetry(self, device, command, data):
-        if device in list(self.deserializers.keys()) and len(data) > 0:
-            if len(self.deserializers[device].keys()) == 1:
-                dev_deserializer = self.deserializers[device][0]
-            else:
-                dev_deserializer = self.deserializers[device][command]
+    # def deserialize_telemetry(self, device, command, data):
+    #     if device in list(self.deserializers.keys()) and len(data) > 0:
+    #         if len(self.deserializers[device].keys()) == 1:
+    #             dev_deserializer = self.deserializers[device][0]
+    #         else:
+    #             dev_deserializer = self.deserializers[device][command]
+    #         dev_deserializer.deserialize(data)
+    #         return self.convert_metric_dict(dev_deserializer.get_metric_dict())
+    #     return data
+
+    def deserialize_telemetry(self, command, data):
+        if command in list(self.deserializers.keys()) and len(data) > 0:
+            dev_deserializer = self.deserializers[command]
             dev_deserializer.deserialize(data)
             return self.convert_metric_dict(dev_deserializer.get_metric_dict())
         return data
@@ -146,33 +153,36 @@ class ConnectionInterface:
         self.monitor.update_data(data["charge_baseline"], data["charge_rms"], data["charge_avg_num_hits"], 
                                  data["light_baseline"], data["light_rms"], data["light_avg_num_hits"])
 
+    def data_monitor_handler(self, command, deserialized_data):
+        if command == 0x4001:
+            self.display_data(deserialized_data)
+        elif command == 0x4002:
+            self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
+        elif command == 0x4003:
+            self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
+
     def deserialize_telemetry_args(self):
         print("Starting telemetry stream deserialization..")
         while True:
             if not self.serialized_data_queue.empty():
                 telem = self.serialized_data_queue.get()
                 if not self.use_fake_hub:
-                    device = self.code_to_device[telem["code"] & 0x7000]
-                    deserialized_data = self.deserialize_telemetry(device=device, command=telem["code"], data=telem["argv"])
-                    if self.db_link is not None and device in list(self.device_to_db_table.keys()):
-                        self.db_link.write_to_database(metrics=deserialized_data, table=self.device_to_db_table[device])
+                    command = telem["code"]
+                    deserialized_data = self.deserialize_telemetry(command=command, data=telem["argv"])
+                    if self.db_link is not None and command in list(self.command_to_db_table.keys()):
+                        self.db_link.write_to_database(metrics=deserialized_data, table=self.command_to_db_table[command])
+                    if command in [0x4001, 0x4002, 0x4003]:
+                        self.data_monitor_handler(command=command, deserialized_data=deserialized_data)
                 else:
-                    deserialized_data = self.deserialize_telemetry(device=telem["dev"], command=telem["cmd_packet"].command,
+                    deserialized_data = self.deserialize_telemetry(command=telem["cmd_packet"].command,
                                                                    data=telem["cmd_packet"].arguments)
                     # Send data to Grafana
                     self.grafana_link.send_mqtt_message(telem["dev"], deserialized_data)
                     
-                    
-                    
                     if telem["dev"] == "TPCMonitorStat":
-                        if telem["cmd_packet"].command == 0x4001:
-                            self.display_data(deserialized_data)
-                        elif telem["cmd_packet"].command == 0x4002:
-                            self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
-                        elif telem["cmd_packet"].command == 0x4003:
-                            self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
-                                                                                                                                           
+                        self.data_monitor_handler(command=telem["cmd_packet"].command, deserialized_data=deserialized_data)
+
                     # Update webpage with raw metrics
                     self.deserial_queue.put({'name': telem["dev"], 'timestamp_sec': time(),
-                                                   "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
+                                              "cmd": telem["cmd_packet"].command, 'args': deserialized_data})
             sleep(0.1)
