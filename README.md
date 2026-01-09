@@ -4,10 +4,28 @@ This depends on two repositories,
 * [networking](https://github.com/NevisNeutrinos/networking) for TCP server connections to the DAQ processes and decoding the eGRAMS packets.
 * [PGramsCommCodec](https://github.com/NevisNeutrinos/PGramsCommCodec) for decoding the word array into a python dictionary.
 
-The conda dependancies are 
+It is recommened to create a virtual environment to install the dependancies. You can use either `conda` or `venv` with `conda` or `pip`
+package managers, respectively.
 ```
-conda install -c conda-forge flask flask-socketio eventlet 
+conda create --name <your_venv>
+conda activate <your_venv>
+or
+python3 -m venv .<your_venv>
+source .<your_venv>/bin/activate
 ```
+
+The dependancies can be installed using conda or pip like,
+```
+conda install -c conda-forge flask flask-socketio eventlet
+or
+pip install flask flask-socketio eventlet
+```
+
+Additionally the python bindings in `networking` and `PGramsCodec` must be compiled and installed in your _**virtual environment**_. 
+
+* networking: `cd extern && pip install .`
+* PGramsCodec: `pip install .`
+
 
 ## Link & Database Credentials
 
