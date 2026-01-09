@@ -101,6 +101,8 @@ class ChannelMonitorWeb:
 
         fig = go.Figure()
         for ch in samples:
+            if type(ch) is not list:
+                continue
             n = len(ch)
             if n < 1: # if no data, skip
                 continue

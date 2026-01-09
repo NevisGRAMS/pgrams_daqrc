@@ -12,6 +12,7 @@ from threading import Thread
 from queue import Queue
 import numpy as np
 from time import time, sleep
+import h5py
 
 
 class ConnectionInterface:
@@ -30,6 +31,11 @@ class ConnectionInterface:
         # Queues to hold the received messages streams
         self.deserial_queue = Queue()
         self.send_queue = Queue()
+
+        # Files to write the data monitor data
+        self.data_monitor_lb = {"name": "lb_data_metrics", "run": 0, "file": None}
+        self.data_monitor_charge = {"name": "charge_data_metrics", "run": 0, "file": None}
+        self.data_monitor_light = {"name": "light_data_metrics", "run": 0, "file": None}
 
         # Start the Grafana link
         self.grafana_link = GrafanaLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port)
@@ -50,8 +56,8 @@ class ConnectionInterface:
             "DaemonCmd": 50001,
             "TPCReadoutStat": 50004,
             "TPCReadoutCmd": 50005,
-            "TPCMonitorStat": 50002,
-            "TPCMonitorCmd": 50003,
+            "TPCMonitorStat": 50016,
+            "TPCMonitorCmd": 50017,
         }
 
         self.code_to_device = {
@@ -93,6 +99,34 @@ class ConnectionInterface:
         t = Thread(target=self.deserialize_telemetry_args, daemon=True)
         t.start()
         print("Reached end of connection class")
+
+    def open_h5_data_monitor_file(self, file_dict, file_number):
+        # If there is already and opened file, close it
+        if file_dict["file"] is not None:
+            if file_dict["file"].id:
+                file_dict["file"].close()
+
+        file_name = "data_files/" + file_dict["name"] + "_" + str(file_dict["run"]) + "_" + str(file_number) + ".hdf5"
+        file_dict["file"] = h5py.File(file_name, "w")
+
+        if not file_dict["file"].id:
+            raise FileNotFoundError(f"File {file_name} not opened!")
+
+        return file_dict
+
+    def open_txt_data_monitor_file(self, file_dict, file_number):
+        # If there is already and opened file, close it
+        if file_dict["file"] is not None:
+            if not file_dict["file"].closed:
+                file_dict["file"].close()
+
+        file_name = "data_files/" + file_dict["name"] + "_" + str(file_dict["run"]) + "_" + str(file_number) + ".txt"
+        file_dict["file"] = open(file_name, "a")
+
+        if file_dict["file"].closed:
+            raise FileNotFoundError(f"File {file_name} not opened!")
+
+        return file_dict
 
     def get_is_fake_hub(self):
         return self.use_fake_hub
@@ -155,16 +189,42 @@ class ConnectionInterface:
         self.monitor.update_data(data["charge_baseline"], data["charge_rms"], data["charge_avg_num_hits"], 
                                  data["light_baseline"], data["light_rms"], data["light_avg_num_hits"])
 
+    def write_data_monitor(self, data, file_dict):
+        use_hdf5 = False
+        print(data)
+        # If a file is not already opened for this run, open it
+        if file_dict["run"] != data["run_number"]:
+            file_dict["run"] = data["run_number"]
+            if use_hdf5:
+                file_dict = self.open_h5_data_monitor_file(file_dict, file_number=data["file_number"])
+            else:
+                print(file_dict)
+                file_dict = self.open_txt_data_monitor_file(file_dict, file_number=data["file_number"])
+                print(file_dict)
+
+        if use_hdf5:
+            for key, value in data.items():
+                file_dict["file"].create_dataset(key, data=value)
+        else:
+            print(json.dumps(data) + "\n")
+            file_dict["file"].write(json.dumps(data))
+            file_dict["file"].flush()
+
+
     def data_monitor_handler(self, command, deserialized_data):
-        if command == 0x4001:
+        if command == 0x4001: # low-bandwidth waveform metrics
+            self.write_data_monitor(data=deserialized_data, file_dict=self.data_monitor_lb)
             self.display_data(deserialized_data)
-        elif command == 0x4002:
+        elif command == 0x4002: # charge waveforms
+            print(deserialized_data)
+            self.write_data_monitor(data=deserialized_data, file_dict=self.data_monitor_charge)
             if deserialized_data["channel_number"] != self.tmp_ctr or len(deserialized_data["charge_samples"]) != 256:
                 print("--> ", deserialized_data["channel_number"], ":", len(deserialized_data["charge_samples"]))
             self.tmp_ctr += 1
             if deserialized_data["channel_number"] == 191: self.tmp_ctr = 0
             self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
-        elif command == 0x4003:
+        elif command == 0x4003: # light waveforms
+            self.write_data_monitor(data=deserialized_data, file_dict=self.data_monitor_light)
             print("--> ", deserialized_data["channel_number"], ":", len(deserialized_data["light_samples"]))
             self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
 
