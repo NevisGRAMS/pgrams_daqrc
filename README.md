@@ -8,4 +8,13 @@ The conda dependancies are
 ```
 conda install -c conda-forge flask flask-socketio eventlet 
 ```
-If using the MySQL database, first set the password using the environment variable `METRICS_DB_PWD`.
+
+## Link & Database Credentials
+
+To operate the program uses an MQTT link to receive metrics and optionally send commands. Additionally,
+if running in `hub_emulator` mode (aka `fake_hub`) the IP address of the host machine must be specified.
+A template script `temp_setup_credentials.sh` is provided in the root directory, a copy can be made and the relevant details added.
+Thereafter `source <your_script_name.sh> will then provide the credentails for all the connections.
+
+The low-bandwidth metrics can be saved to a MySQL database for storage and display by Grafana. The password for the 
+database can also be set in the credential script.
