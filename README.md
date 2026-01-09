@@ -5,27 +5,23 @@ This depends on two repositories,
 * [PGramsCommCodec](https://github.com/NevisNeutrinos/PGramsCommCodec) for decoding the word array into a python dictionary.
 
 It is recommened to create a virtual environment to install the dependancies. You can use either `conda` or `venv` with `conda` or `pip`
-package managers, respectively.
+package managers, respectively. The dependancies can be installed and environment created using conda (the pip version is on the todo list),
 ```
-conda create --name <your_venv>
-conda activate <your_venv>
-or
-python3 -m venv .<your_venv>
-source .<your_venv>/bin/activate
+conda env create -f environment.yml
 ```
 
-The dependancies can be installed using conda or pip like,
-```
-conda install -c conda-forge flask flask-socketio eventlet
-or
-pip install flask flask-socketio eventlet
-```
-
-Additionally the python bindings in `networking` and `PGramsCodec` must be compiled and installed in your _**virtual environment**_. 
+This will create a virtual environemnt `pgrams_tpc_metrics` and install all the dependancies. Additionally the python bindings 
+in `networking` and `PGramsCodec` must be compiled and installed in your _**virtual environment**_. 
 
 * networking: `cd extern && pip install .`
 * PGramsCodec: `pip install .`
 
+## Running 
+
+After the environment has been set up and the dependancies installed, the program can be run,
+```
+python daq_control.py
+```
 
 ## Link & Database Credentials
 

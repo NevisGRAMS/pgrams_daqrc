@@ -50,7 +50,7 @@ class MysqlLink:
 
     def write_to_database(self, metrics, table):
         if table not in self.database_tables:
-            print(f"Unknown table {table}! \n Available tables are: {self.database_tables")
+            print(f"Unknown table {table}! \n Available tables are: {self.database_tables}")
             raise KeyError
             return
 
