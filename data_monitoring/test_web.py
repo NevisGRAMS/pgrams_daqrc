@@ -15,8 +15,8 @@ class ChannelMonitorWeb:
         # Internal storage of arrays
         self.data_192 = None
         self.data_36 = None
-        self.charge_samples = np.zeros((193,256))
-        self.light_samples = np.zeros((37, 208))
+        self.charge_samples = {ch: [] for ch in range(193)}
+        self.light_samples = {ch: [] for ch in range(64)}
 
         # Dash app
         self.app = dash.Dash(__name__)
@@ -58,9 +58,9 @@ class ChannelMonitorWeb:
 
     def update_samples(self, sample, channel, is_charge):
         if is_charge:
-            self.charge_samples[channel] = sample
+            self.charge_samples[channel] = list(sample)
         else:
-            self.light_samples[channel] = sample
+            self.light_samples[channel] = list(sample)
 
     # ------------------------------------------------------------
     # Graph builder (baseline + RMS together; hits alone)
@@ -102,6 +102,8 @@ class ChannelMonitorWeb:
         fig = go.Figure()
         for ch in samples:
             n = len(ch)
+            if n < 1: # if no data, skip
+                continue
             # Create a Scatter trace
             scatter_trace = go.Scatter(x=list(range(n)), y=ch, mode='lines+markers')
             fig.update_layout(yaxis_range=[0, 4100])
