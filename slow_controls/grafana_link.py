@@ -40,4 +40,4 @@ class GrafanaLink:
             message = self.calculate_rate(message)
             json_string = json.dumps(message)
             self.client.publish(self.topic[msg_source], json_string)
-            print(f"Published '{message}' to topic '{self.topic[msg_source]}'")
+            #print(f"Published '{message}' to topic '{self.topic[msg_source]}'")

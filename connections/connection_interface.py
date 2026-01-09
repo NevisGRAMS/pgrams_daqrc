@@ -17,13 +17,14 @@ from time import time, sleep
 class ConnectionInterface:
     def __init__(self, interface):
 
+        self.tmp_ctr = 0
         self.use_fake_hub = True
         self.ip_addr = os.getenv("FAKE_HUB_IP")
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
 
-        self.mqtt_broker_address = os.getenv("MQTT_IP") 
-        self.mqtt_broker_port = int(os.getenv("MQTT_PORT")) 
+        self.mqtt_broker_address = os.getenv("TPC_MQTT_IP") 
+        self.mqtt_broker_port = int(os.getenv("TPC_MQTT_PORT")) 
 
         self.serialized_data_queue = Queue()
         # Queues to hold the received messages streams
@@ -36,8 +37,8 @@ class ConnectionInterface:
         try:
             self.db_link = MysqlLink()
             self.command_to_db_table = {
-                int(CommCodes.OrcHardwareStatus): self.db_link.database_tables["orch_metrics"],
-                int(CommCodes.ColHardwareStatus): self.db_link.database_tables["tpc_metrics"],
+                int(CommCodes.OrcHardwareStatus): self.db_link.orch_db_name,
+                int(CommCodes.ColHardwareStatus): self.db_link.tpc_db_name,
             }
         except Exception as e:
             print(f"Failed to connect to MySQL database with exception: {e}")
@@ -45,12 +46,12 @@ class ConnectionInterface:
             self.device_to_db_table = {}
 
         self.device_dict = {
-            "DaemonStat": 50020,
-            "DaemonCmd": 50021,
-            "TPCReadoutStat": 50022,
-            "TPCReadoutCmd": 50023,
-            "TPCMonitorStat": 50024,
-            "TPCMonitorCmd": 50025,
+            "DaemonStat": 50000,
+            "DaemonCmd": 50001,
+            "TPCReadoutStat": 50004,
+            "TPCReadoutCmd": 50005,
+            "TPCMonitorStat": 50002,
+            "TPCMonitorCmd": 50003,
         }
 
         self.code_to_device = {
@@ -59,7 +60,8 @@ class ConnectionInterface:
                 }
 
         print(f"Connecting to {interface}..")
-        metric_topic = "rc/pgrams_metric_stream"
+        metric_topic = os.getenv("TPC_METRIC_TOPIC")
+        #metric_topic = "rc/pgrams_metric_stream"
         command_topic = "rc/pgrams_command_stream"
         if self.use_fake_hub:
             self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
@@ -157,8 +159,13 @@ class ConnectionInterface:
         if command == 0x4001:
             self.display_data(deserialized_data)
         elif command == 0x4002:
+            if deserialized_data["channel_number"] != self.tmp_ctr or len(deserialized_data["charge_samples"]) != 256:
+                print("--> ", deserialized_data["channel_number"], ":", len(deserialized_data["charge_samples"]))
+            self.tmp_ctr += 1
+            if deserialized_data["channel_number"] == 191: self.tmp_ctr = 0
             self.display_samples(deserialized_data["charge_samples"], deserialized_data["channel_number"], is_charge=True)
         elif command == 0x4003:
+            print("--> ", deserialized_data["channel_number"], ":", len(deserialized_data["light_samples"]))
             self.display_samples(deserialized_data["light_samples"], deserialized_data["channel_number"], is_charge=False)
 
     def deserialize_telemetry_args(self):

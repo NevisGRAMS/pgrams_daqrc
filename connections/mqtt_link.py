@@ -38,14 +38,14 @@ class MqttLink:
     def start_client(self):
         # For metrics SUB
         self.metric_client = mqtt.Client(client_id="MetricSub")
-        self.metric_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
+        self.metric_client.username_pw_set(os.getenv("TPC_MQTT_UN"), os.getenv("TPC_MQTT_PWD"))
         self.metric_client.on_connect = self.on_connect
         self.metric_client.on_message = self.on_message if self.use_fake_hub else self.on_message_hub
         self.metric_client.connect(self.broker_address, self.port, keepalive=120)
         self.metric_client.loop_start()
         # For commands PUB
         self.command_client = mqtt.Client(client_id="CommandPub")  # Unique client ID
-        self.command_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
+        self.command_client.username_pw_set(os.getenv("TPC_MQTT_UN"), os.getenv("TPC_MQTT_PWD"))
         self.command_client.connect(self.broker_address, self.port, keepalive=120)
         t2 = Thread(target=self.send_commands, daemon=True)
         t2.start()
@@ -75,6 +75,8 @@ class MqttLink:
     def on_message_hub(self, client, userdata, msg):
         """Continuously read messages from the Hub computer and emit received commands."""
         payload = json.loads(msg.payload.decode("utf-8"))
+        #payload = msg.payload.decode("utf-8")
+        print("payload: ", payload)
         self.queue.put({"code": payload["code"], "argv": payload["argv"]})
 
 

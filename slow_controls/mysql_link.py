@@ -4,24 +4,21 @@ import os
 
 class MysqlLink:
     def __init__(self):
-        self.database_tables = {
-            "orch_metrics": "orch_metrics",
-            "tpc_metrics": "tpc_metrics"
-        }
         self.orch_db_name = "orch_metrics"
         self.tpc_db_name = "tpc_metrics"
+        self.database_tables = [self.orch_db_name, self.tpc_db_name]
         self.database_conn = self.connect_to_database()
 
         for table in self.database_tables:
-            self.check_tables(table_name=self.database_tables[table])
+            self.check_tables(table_name=table)
 
 
     def connect_to_database(self):
         return mysql.connector.connect(
-            host="localhost",
-            user="pgrams",
-            password=os.getenv("METRICS_DB_PWD"),
-            database="pgrams_metrics",
+            host=os.getenv("TPC_DB_HOST_IP"),
+            user=os.getenv("TPC_DB_USER"),
+            password=os.getenv("TPC_DB_PASSWORD"),
+            database=os.getenv("TPC_DB_NAME"),
         )
     print("Connected to database!")
 
@@ -52,8 +49,8 @@ class MysqlLink:
         self.database_conn.commit()
 
     def write_to_database(self, metrics, table):
-        if table not in list(self.database_tables.keys()):
-            print(f"Unknown table {table}! \n Available tables are: {list(self.database_tables.keys())}")
+        if table not in self.database_tables:
+            print(f"Unknown table {table}! \n Available tables are: {self.database_tables")
             raise KeyError
             return
 

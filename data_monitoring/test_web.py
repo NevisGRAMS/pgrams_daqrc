@@ -7,7 +7,7 @@ import numpy as np
 
 
 class ChannelMonitorWeb:
-    def __init__(self, host="10.44.45.96", port=8051):
+    def __init__(self, host="127.0.0.1", port=8051):
         print("Starting display..")
         self.host = host
         self.port = port
@@ -57,7 +57,6 @@ class ChannelMonitorWeb:
         self.data_36 = (baseline_36, rms_36, hits_36)
 
     def update_samples(self, sample, channel, is_charge):
-        print(len(sample), channel, is_charge)
         if is_charge:
             self.charge_samples[channel] = sample
         else:

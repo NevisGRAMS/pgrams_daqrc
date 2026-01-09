@@ -37,11 +37,11 @@ class FakeHub:
     def start_client(self):
         # For metrics PUB
         self.metric_client = mqtt.Client(client_id="MetricPub") # Unique client ID
-        self.metric_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
+        self.metric_client.username_pw_set(os.getenv("TPC_MQTT_UN"), os.getenv("TPC_MQTT_PWD"))
         self.metric_client.connect(self.broker_address, self.port, keepalive=120)
         # For commands SUB
         self.command_client = mqtt.Client(client_id="CommandSub")
-        self.command_client.username_pw_set(os.getenv("MQTT_UN"), os.getenv("MQTT_PWD"))
+        self.command_client.username_pw_set(os.getenv("TPC_MQTT_UN"), os.getenv("TPC_MQTT_PWD"))
         self.command_client.on_connect = self.on_connect
         self.command_client.on_message = self.on_message #self.rc_to_daq
         self.command_client.connect(self.broker_address, self.port, keepalive=120)
@@ -104,7 +104,6 @@ class FakeHub:
             tcp_protocol.arguments = command.arguments
             serialized = tcp_protocol.serialize() # returns list of bytes
             # Construct the json message and send on MQTT
-            print("CMD:", hex(int(command.command)))
             message = {"device": device, "cmd": int(command.command), "data": serialized}
             self.metric_client.publish(self.metric_topic, json.dumps(message))
 
