@@ -1,3 +1,4 @@
+export METRICS_DB_PWD=
 export MQTT_UN=
 export MQTT_PWD=
 export MQTT_IP=
