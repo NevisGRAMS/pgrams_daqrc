@@ -9,7 +9,9 @@ export TPC_MQTT_PORT=""
 export FAKE_HUB_IP=""
 
 # Credentials for the metrics
-export TPC_METRIC_TOPIC="TPCMonitor_ground_telemetry"
+export ORC_METRIC_TOPIC="Orchestrator_ground_telemetry"
+export MONITOR_METRIC_TOPIC="TPCMonitor_ground_telemetry"
+export TPC_METRIC_TOPIC="TPC_ground_telemetry"
 export TPC_DB_HOST_IP=""
 export TPC_DB_USER=""
 export TPC_DB_PASSWORD=""

@@ -1,6 +1,5 @@
 import json
 import os
-from connections.fake_hub import FakeHub
 from connections.mqtt_link import MqttLink
 from slow_controls.grafana_link import GrafanaLink
 from slow_controls.mysql_link import MysqlLink
@@ -14,12 +13,16 @@ import numpy as np
 from time import time, sleep
 import h5py
 
+USE_FAKE_HUB = False
+
+if USE_FAKE_HUB:
+    from connections.fake_hub import FakeHub
 
 class ConnectionInterface:
     def __init__(self, interface):
 
         self.tmp_ctr = 0
-        self.use_fake_hub = True
+        self.use_fake_hub = USE_FAKE_HUB
         self.ip_addr = os.getenv("FAKE_HUB_IP")
         if interface not in ["TCP", "MQTT"]:
             raise ValueError(f"Invalid interface {interface}")
@@ -66,8 +69,6 @@ class ConnectionInterface:
                 }
 
         print(f"Connecting to {interface}..")
-        metric_topic = os.getenv("TPC_METRIC_TOPIC")
-        #metric_topic = "rc/pgrams_metric_stream"
         command_topic = "rc/pgrams_command_stream"
         if self.use_fake_hub:
             self.interface = FakeHub(ip_addr=self.ip_addr, device_dict=self.device_dict,
@@ -75,7 +76,7 @@ class ConnectionInterface:
                                      metric_topic=metric_topic, command_topic=command_topic)
 
         MqttLink(mqtt_broker_addr=self.mqtt_broker_address, mqtt_port=self.mqtt_broker_port,
-                 metric_topic=metric_topic, command_topic=command_topic, use_fake_hub=self.use_fake_hub,
+                 command_topic=command_topic, use_fake_hub=self.use_fake_hub,
                  queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
@@ -237,6 +238,7 @@ class ConnectionInterface:
                     command = telem["code"]
                     deserialized_data = self.deserialize_telemetry(command=command, data=telem["argv"])
                     if self.db_link is not None and command in list(self.command_to_db_table.keys()):
+                        print(f"WRITE to DB {command}")
                         self.db_link.write_to_database(metrics=deserialized_data, table=self.command_to_db_table[command])
                     if command in [0x4001, 0x4002, 0x4003]:
                         self.data_monitor_handler(command=command, deserialized_data=deserialized_data)

@@ -7,7 +7,7 @@ import os
 from network_module import TCPProtocol, Command
 
 class MqttLink:
-    def __init__(self, mqtt_broker_addr, mqtt_port, metric_topic, command_topic, use_fake_hub, queue=None, send_queue=None):
+    def __init__(self, mqtt_broker_addr, mqtt_port, command_topic, use_fake_hub, queue=None, send_queue=None):
 
         # Just a class for deserialize method
         self.tcp_protocol = TCPProtocol(0x0, 0)
@@ -21,7 +21,11 @@ class MqttLink:
         self.command_client = None
         self.broker_address = mqtt_broker_addr
         self.port = mqtt_port
-        self.metric_topic = metric_topic
+
+        self.orc_metric_topic = os.getenv("ORC_METRIC_TOPIC")
+        self.tpc_metric_topic = os.getenv("TPC_METRIC_TOPIC")
+        self.monitor_metric_topic = os.getenv("MONITOR_METRIC_TOPIC")
+
         self.command_topic = command_topic
         # Start MQTT link
         self.start_client()
@@ -33,7 +37,11 @@ class MqttLink:
 
     def on_connect(self, client, userdata, flags, rc):
         print("mqtt_link: Connected with result code", rc)
-        self.metric_client.subscribe(self.metric_topic)
+        #self.metric_client.subscribe(self.metric_topic)
+        self.metric_client.subscribe([(self.orc_metric_topic, 0),
+                                      (self.tpc_metric_topic, 0),
+                                      (self.monitor_metric_topic, 0)
+                                      ])
 
     def start_client(self):
         # For metrics SUB
