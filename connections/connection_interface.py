@@ -3,7 +3,7 @@ import os
 from connections.mqtt_link import MqttLink
 from slow_controls.grafana_link import GrafanaLink
 from slow_controls.mysql_link import MysqlLink
-from datamon import DaqCompMonitor, TpcReadoutMonitor, LowBwTpcMonitor, CommCodes
+from datamon import DaqCompMonitor, TpcReadoutMonitor, LowBwTpcMonitor, CommCodes, TelemCodes
 from datamon import TpcMonitorChargeEvent, TpcMonitorLightEvent
 from data_monitoring.test_web import ChannelMonitorWeb
 
@@ -46,8 +46,8 @@ class ConnectionInterface:
         try:
             self.db_link = MysqlLink()
             self.command_to_db_table = {
-                int(CommCodes.OrcHardwareStatus): self.db_link.orch_db_name,
-                int(CommCodes.ColHardwareStatus): self.db_link.tpc_db_name,
+                int(TelemCodes.OrcHardwareStatus): self.db_link.orch_db_name,
+                int(TelemCodes.ColHardwareStatus): self.db_link.tpc_db_name,
             }
         except Exception as e:
             print(f"Failed to connect to MySQL database with exception: {e}")
@@ -80,8 +80,8 @@ class ConnectionInterface:
                  queue=self.serialized_data_queue, send_queue=self.send_queue)
 
         self.deserializers = {
-            int(CommCodes.OrcHardwareStatus): DaqCompMonitor(),
-            int(CommCodes.ColHardwareStatus): TpcReadoutMonitor(),
+            int(TelemCodes.OrcHardwareStatus): DaqCompMonitor(),
+            int(TelemCodes.ColHardwareStatus): TpcReadoutMonitor(),
             0x4001: LowBwTpcMonitor(),
             0x4002: TpcMonitorChargeEvent(),
             0x4003: TpcMonitorLightEvent()
