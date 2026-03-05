@@ -1,0 +1,39 @@
+[Unit]
+Description=TPC Metrics Service
+# Start after the network is available
+After=network.target network-online.target
+
+[Service]
+# Type=simple: systemd considers the main process the service itself.
+Type=simple
+
+# Set up the database and MQTT credentials and names
+ExecStartPre=/home/pgrams/tpc_data/daq_monitoring/pgrams_daqrc/setup_credentials.sh
+# Path to the python script
+ExecStart=/home/pgrams/<conda_env> /home/pgrams/tpc_data/daq_monitoring/pgrams_daqrc/run_tpc_metrics.py
+WorkingDirectory=/home/pgrams/tpc_data/daq_monitoring/pgrams_daqrc
+
+# User and Group to run as
+User=pgrams
+Group=pgrams
+# Add SupplementaryGroups= if the user needs access via other groups
+
+# Restart behavior
+Restart=always
+# Other options: no, always, on-success, on-abnormal, on-abort
+RestartSec=5s
+
+# Standard Output/Error handling
+# 'journal' is the default for Type=simple, sending stdout/stderr to journald
+StandardOutput=journal
+StandardError=journal
+# Alternatively, redirect to files (ensure permissions):
+# StandardOutput=append:/var/log/my_controller/output.log
+# StandardError=append:/var/log/my_controller/error.log
+
+# Resource limits (optional)
+# LimitNOFILE=65536
+
+[Install]
+# Enable the service to start on boot for multi-user target
+WantedBy=multi-user.target
