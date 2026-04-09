@@ -9,8 +9,8 @@ class MysqlLink:
         self.database_tables = [self.orch_db_name, self.tpc_db_name]
         self.database_conn = self.connect_to_database()
 
-        for table in self.database_tables:
-            self.check_tables(table_name=table)
+        #for table in self.database_tables:
+        #    self.check_tables(table_name=table)
 
 
     def connect_to_database(self):
@@ -29,7 +29,7 @@ class MysqlLink:
         CREATE TABLE IF NOT EXISTS """ + table_name + """ (
             id INT AUTO_INCREMENT PRIMARY KEY,
             data_json JSON,
-            ts TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ts BIGINT NOT NULL DEFAULT (UNIX_TIMESTAMP())
         )
         """)
         self.database_conn.commit()
