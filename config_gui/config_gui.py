@@ -495,7 +495,7 @@ class ConfigGUI:
                     timestamp=now,
                     description=description,
                     config_json=config_json,
-                    output_filename=filename,
+                    txt_file=filename,
                 )
             except Exception as e:
                 messagebox.showwarning("DB Warning", f"Config file saved but DB logging failed:\n{e}")

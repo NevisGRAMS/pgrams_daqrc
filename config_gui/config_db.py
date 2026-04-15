@@ -17,7 +17,7 @@ CREATE TABLE IF NOT EXISTS {TABLE_NAME} (
     timestamp DATETIME,
     description VARCHAR(255),
     config_json TEXT,
-    output_filename VARCHAR(255)
+    txt_file VARCHAR(255)
 )
 """
 
@@ -49,13 +49,13 @@ class ConfigDB:
         cursor.close()
         return next_id
 
-    def log_config(self, timestamp, description, config_json, output_filename):
+    def log_config(self, timestamp, description, config_json, txt_file):
         """Insert a configuration record."""
         cursor = self.conn.cursor()
         cursor.execute(
-            f"INSERT INTO {TABLE_NAME} (timestamp, description, config_json, output_filename) "
+            f"INSERT INTO {TABLE_NAME} (timestamp, description, config_json, txt_file) "
             "VALUES (%s, %s, %s, %s)",
-            (timestamp, description, config_json, output_filename),
+            (timestamp, description, config_json, txt_file),
         )
         self.conn.commit()
         cursor.close()
