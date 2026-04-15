@@ -31,6 +31,10 @@ class ConfigManager:
                         self.config_dict[key] = value
         self.config.set_config_dict(self.config_dict)
 
+    def clear(self):
+        self.config.clear()
+        self.config_dict = self.config.get_metric_dict()
+
     def serialize(self):
         return self.config.serialize()
 
